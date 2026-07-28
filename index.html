@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unraid2mos - Unraid to MOS Hub template converter</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e6e8eb;
+    --text-muted: #9aa1ac;
+    --accent: #4f8cff;
+    --warn: #e0a63b;
+    --ok: #3bc27a;
+    --err: #e05555;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.25rem; }
+  p.lede { color: var(--text-muted); margin: 0 0 1.5rem; }
+  a { color: var(--accent); }
+  fieldset {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem 1.25rem;
+    margin: 0 0 1rem;
+  }
+  legend { padding: 0 0.4rem; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  p.hint { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 0.9rem; }
+  .row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .field { flex: 1; min-width: 160px; }
+  label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+  input[type=text], input[type=number] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 0.5rem 0.6rem;
+    font-size: 0.95rem;
+  }
+  .checks { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-top: 0.25rem; }
+  .checks label { display: flex; align-items: center; gap: 0.4rem; color: var(--text); font-size: 0.9rem; margin: 0; }
+  input[type=file] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    color: var(--text-muted);
+  }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  #results { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
+  .card h3 { margin: 0 0 0.5rem; font-size: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .card ul { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--warn); }
+  .card.fail { border-color: var(--err); }
+  .card.fail h3 { color: var(--err); }
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(59, 194, 122, 0.15);
+    color: var(--ok);
+  }
+  .downloadbar { margin-top: 1rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  footer { margin-top: 3rem; color: var(--text-muted); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>unraid2mos</h1>
+  <p class="lede">Convert Unraid Community Applications docker templates (XML) into MOS Hub docker templates (JSON), right in your browser. Nothing is uploaded anywhere - conversion runs entirely client-side.</p>
+
+  <form id="form">
+    <fieldset>
+      <legend>Storage paths</legend>
+      <p class="hint">Defaults to /mnt/cache, MOS's own documented standard pool path for published templates. Leave blank to use that default, or type a different pool name.</p>
+      <div class="row">
+        <div class="field">
+          <label for="oldPools">Old pool name(s), comma separated</label>
+          <input type="text" id="oldPools" placeholder="/mnt/user/">
+        </div>
+        <div class="field">
+          <label for="pool">New pool name</label>
+          <input type="text" id="pool" placeholder="/mnt/cache">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="puid">PUID</label>
+          <input type="text" id="puid" value="500">
+        </div>
+        <div class="field">
+          <label for="pgid">PGID</label>
+          <input type="text" id="pgid" value="500">
+        </div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="normalizeIds" checked> Normalize PUID/PGID</label>
+        <label><input type="checkbox" id="compact"> Compact output (omit null fields)</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Templates</legend>
+      <input type="file" id="files" accept=".xml" multiple>
+    </fieldset>
+
+    <button type="submit">Convert</button>
+  </form>
+
+  <div id="results"></div>
+  <div id="downloadbar" class="downloadbar"></div>
+
+  <footer>
+    Runs the same conversion logic as the <a href="unraid2mos.py">unraid2mos.py</a> CLI script. See the <a href="README.md">README</a> for details on what gets converted and why.
+  </footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="converter.js"></script>
+<script>
+(function () {
+  const form = document.getElementById("form");
+  const resultsEl = document.getElementById("results");
+  const downloadbarEl = document.getElementById("downloadbar");
+
+  function download(filename, text) {
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    resultsEl.innerHTML = "";
+    downloadbarEl.innerHTML = "";
+
+    const fileInput = document.getElementById("files");
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) {
+      resultsEl.innerHTML = '<div class="card fail"><h3>No files selected</h3></div>';
+      return;
+    }
+
+    const options = {
+      // Field shows "/mnt/cache" as greyed-out placeholder text only (no real
+      // value) so it's clear this is the default, not something already typed.
+      // Blank submission still resolves to the bare pool name "cache" here,
+      // matching unraid2mos.py's own default when no --pool flag is passed.
+      pool: document.getElementById("pool").value.trim() || "cache",
+      oldPools: document.getElementById("oldPools").value.split(",").map((s) => s.trim()).filter(Boolean),
+      puid: document.getElementById("puid").value.trim() || "500",
+      pgid: document.getElementById("pgid").value.trim() || "500",
+      rewritePaths: true,
+      normalizeIds: document.getElementById("normalizeIds").checked,
+      compact: document.getElementById("compact").checked,
+    };
+
+    const converted = [];
+
+    for (const file of files) {
+      const xmlText = await file.text();
+      const card = document.createElement("div");
+      card.className = "card";
+      try {
+        const { template, warnings } = window.UnraidToMos.convertTemplate(xmlText, options);
+        const filename = window.UnraidToMos.slugifyFilename(template.name) + ".json";
+        const jsonText = JSON.stringify(template, null, 2) + "\n";
+        converted.push({ filename, jsonText });
+
+        card.innerHTML = `<h3>${template.name} <span class="badge">${filename}</span></h3>`;
+        if (warnings.length) {
+          const ul = document.createElement("ul");
+          warnings.forEach((w) => {
+            const li = document.createElement("li");
+            li.textContent = w;
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        }
+        const btn = document.createElement("button");
+        btn.className = "secondary";
+        btn.style.marginTop = "0.6rem";
+        btn.textContent = "Download " + filename;
+        btn.addEventListener("click", () => download(filename, jsonText));
+        card.appendChild(btn);
+      } catch (err) {
+        card.className = "card fail";
+        card.innerHTML = `<h3>${file.name}</h3><p>${err.message}</p>`;
+      }
+      resultsEl.appendChild(card);
+    }
+
+    if (converted.length > 1 && window.JSZip) {
+      const zipBtn = document.createElement("button");
+      zipBtn.textContent = "Download all as .zip";
+      zipBtn.addEventListener("click", async () => {
+        const zip = new JSZip();
+        converted.forEach((c) => zip.file(c.filename, c.jsonText));
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "mos-templates.zip";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      downloadbarEl.appendChild(zipBtn);
+    }
+  });
+})();
+</script>
+</body>
+</html>
